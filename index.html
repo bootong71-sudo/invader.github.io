@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>カラフルインベーダーゲーム</title>
+<style>
+  body { margin:0; background:black; color:white; text-align:center; font-family:sans-serif; }
+  canvas { display:block; margin:0 auto; border:2px solid #444; }
+  #controls { margin:10px; }
+  .slider-label { margin:0 10px; }
+</style>
+</head>
+<body>
+
+<h1>カラフルインベーダーゲーム</h1>
+
+<div id="controls">
+  <label class="slider-label">行数:
+    <input type="range" id="rowsSlider" min="2" max="5" value="3">
+    <span id="rowsVal">3</span>
+  </label>
+  <label class="slider-label">落下速度:
+    <input type="range" id="speedSlider" min="0.1" max="5" step="0.1" value="2">
+    <span id="speedVal">2.0</span>
+  </label>
+</div>
+
+<canvas id="gameCanvas" width="800" height="600"></canvas>
+<button id="startBtn">スタート</button>
+<h2 id="message"></h2>
+<h1 id="scoreDisplay">0</h1>
+
+<audio id="shootSound" src="shoot.mp3"></audio>
+<audio id="hitSound" src="hit.mp3"></audio>
+<audio id="gameOverSound" src="gameover.mp3"></audio>
+<audio id="fanfareSound" src="fanfare.mp3"></audio>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+let enemies = [], player, beams = [];
+let score = 0, gameOver = false, gameClear = false;
+let shotCount = 0, gameStarted = false;
+let enemyDir = 1;
+let fallSpeed = 2.0;
+let canShoot = false;
+
+// UI
+const rowsSlider = document.getElementById("rowsSlider");
+const rowsVal = document.getElementById("rowsVal");
+rowsSlider.addEventListener("input", ()=>{ rowsVal.textContent = rowsSlider.value; });
+
+const speedSlider = document.getElementById("speedSlider");
+const speedVal = document.getElementById("speedVal");
+speedSlider.addEventListener("input", ()=>{
+  fallSpeed = parseFloat(speedSlider.value);
+  speedVal.textContent = fallSpeed.toFixed(1);
+});
+
+// 発射
+let lastShotTime = 0;
+function shoot() {
+  if(!gameStarted || gameOver || gameClear || !canShoot) return;
+  const now = Date.now();
+  if(now - lastShotTime < 100) return; // 0.1秒ごとに発射可能
+  lastShotTime = now;
+  
+  shotCount++;
+  const s = document.getElementById("shootSound"); s.currentTime=0; s.play();
+
+  if(shotCount % 10 === 0){
+    // ボーナスショット：垂直から左右45度の範囲に8本
+    const angles = [];
+    const startAngle = -45;
+    const endAngle = 45;
+    const step = (endAngle - startAngle) / (8 - 1);
+    for(let i=0;i<8;i++){
+      angles.push(startAngle + step*i);
+    }
+    angles.forEach(a=>{
+      beams.push({
+        x:player.x,
+        y:player.y-player.h/2,
+        speed:5,
+        dx:Math.sin(a*Math.PI/180),
+        dy:-Math.cos(a*Math.PI/180)
+      });
+    });
+  } else {
+    beams.push({x:player.x, y:player.y-player.h/2, speed:5, dx:0, dy:-1});
+  }
+}
+
+// 操作
+document.addEventListener("keydown", shoot);
+canvas.addEventListener("mousedown", shoot);
+canvas.addEventListener("touchstart", shoot);
+
+// スタート
+document.getElementById("startBtn").addEventListener("click", ()=>startGame());
+
+function startGame(){
+  score=0; shotCount=0;
+  gameOver=false; gameClear=false;
+  gameStarted=true;
+  enemyDir=1;
+  beams=[];
+  canShoot=false; 
+  setTimeout(()=>canShoot=true, 200);
+
+  fallSpeed = parseFloat(speedSlider.value);
+
+  document.getElementById("message").textContent="";
+  document.getElementById("scoreDisplay").textContent="0";
+  document.getElementById("startBtn").style.display="none";
+  createPlayer();
+  createEnemies();
+  requestAnimationFrame(gameLoop);
+}
+
+function createEnemies(){
+  enemies=[];
+  const rows=parseInt(rowsSlider.value);
+  const cols=10;
+  const spacingX=60, spacingY=50;
+  const startX=50, startY=50;
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      enemies.push({
+        x:startX+c*spacingX,
+        y:startY+r*spacingY,
+        w:50, h:35,
+        alive:true,
+        color:`hsl(${Math.random()*360},80%,60%)`
+      });
+    }
+  }
+}
+
+function createPlayer(){
+  player={x:canvas.width/2, y:canvas.height-30, w:30, h:20, dir:1, speed:1.5};
+}
+
+function moveEnemies(){
+  const alive = enemies.filter(e=>e.alive);
+  if(alive.length==0) return;
+  let leftMost = Math.min(...alive.map(e=>e.x-e.w/2));
+  let rightMost = Math.max(...alive.map(e=>e.x+e.w/2));
+  const horizontalSpeed = 0.75*fallSpeed; // 敵の左右移動は落下速度に連動
+  if(leftMost<=0 || rightMost>=canvas.width) enemyDir*=-1;
+  alive.forEach(e=>{
+    e.x += enemyDir*horizontalSpeed;
+    e.y += fallSpeed*0.25;
+    if(e.y+e.h/2 >= player.y - player.h/2) triggerGameOver();
+  });
+}
+
+function triggerGameOver(){
+  if(!gameOver && !gameClear){
+    gameOver=true;
+    const g=document.getElementById("gameOverSound"); g.currentTime=0; g.play();
+    document.getElementById("message").textContent="ゲームオーバー";
+    document.getElementById("startBtn").style.display="inline-block";
+  }
+}
+
+function gameLoop(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  if(gameStarted){
+    if(!gameOver && !gameClear){
+      // プレイヤー自動移動（固定速度）
+      player.x += player.dir*player.speed;
+      if(player.x<player.w/2 || player.x>canvas.width-player.w/2) player.dir*=-1;
+
+      // ビーム移動
+      beams.forEach(b=>{ b.x+=b.dx*b.speed; b.y+=b.dy*b.speed; });
+      beams = beams.filter(b=> b.x>=0 && b.x<=canvas.width && b.y>=0 && b.y<=canvas.height);
+
+      // 敵移動
+      moveEnemies();
+
+      // 衝突判定
+      beams.forEach(b=>{
+        enemies.forEach(e=>{
+          if(e.alive && b.x>e.x-e.w/2 && b.x<e.x+e.w/2 && b.y>e.y-e.h/2 && b.y<e.y+e.h/2){
+            e.alive=false; b.x=-999; score++;
+            document.getElementById("scoreDisplay").textContent=score;
+            const h=document.getElementById("hitSound"); h.currentTime=0; h.play();
+          }
+        });
+      });
+
+      // 全滅チェック
+      if(enemies.every(e=>!e.alive)){
+        gameClear=true;
+        setTimeout(()=>{
+          const f=document.getElementById("fanfareSound"); f.currentTime=0; f.play();
+          document.getElementById("message").textContent=`おめでとう！クリア！`;
+          document.getElementById("startBtn").style.display="inline-block";
+        },1000);
+      }
+    }
+  }
+
+  // 描画
+  enemies.forEach(e=>{
+    if(!e.alive) return;
+    ctx.fillStyle=e.color;
+    ctx.fillRect(e.x-e.w/2,e.y-e.h/2,e.w,e.h);
+  });
+
+  ctx.fillStyle="#0f0"; ctx.fillRect(player.x-player.w/2,player.y-player.h/2,player.w,player.h);
+  ctx.fillStyle="#0a0"; ctx.fillRect(player.x-2,player.y-player.h/2-8,4,8);
+
+  ctx.fillStyle="#ff0";
+  beams.forEach(b=>{ ctx.fillRect(b.x-8,b.y-8,16,8); });
+
+  requestAnimationFrame(gameLoop);
+}
+</script>
+
+</body>
+</html>
