@@ -115,11 +115,9 @@ function shoot() {
   }
 }
 
-// キーボード押しっぱなし連射
-document.addEventListener("keydown", e=>{ shooting = true; });
-document.addEventListener("keyup", e=>{ shooting = false; });
-
-// マウス／タッチ 長押し連射
+// 長押し連射
+document.addEventListener("keydown", ()=>{ shooting = true; });
+document.addEventListener("keyup", ()=>{ shooting = false; });
 canvas.addEventListener("mousedown", ()=>{ shooting = true; });
 canvas.addEventListener("mouseup", ()=>{ shooting = false; });
 canvas.addEventListener("mouseleave", ()=>{ shooting = false; });
@@ -127,10 +125,10 @@ canvas.addEventListener("touchstart", e=>{ shooting = true; e.preventDefault(); 
 canvas.addEventListener("touchend", ()=>{ shooting = false; });
 
 // スタート
-document.getElementById("startBtn").addEventListener("click", ()=>startGame());
+document.getElementById("startBtn").addEventListener("click", startGame);
 
 function startGame(){
-  if(animationId){ cancelAnimationFrame(animationId); }
+  if(animationId) cancelAnimationFrame(animationId);
 
   enemies = [];
   beams = [];
