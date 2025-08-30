@@ -5,7 +5,7 @@
 <title>カラフルインベーダーゲーム</title>
 <style>
   body { margin:0; background:black; color:white; text-align:center; font-family:sans-serif; }
-  canvas { display:block; margin:0 auto; border:2px solid #444; }
+  canvas { display:block; margin:0 auto; border:2px solid #444; touch-action:none; }
   #controls { margin:10px; }
   .slider-label { margin:0 10px; }
 </style>
@@ -45,6 +45,8 @@ let shotCount = 0, gameStarted = false;
 let enemyDir = 1;
 let fallSpeed = 2.0;
 let canShoot = false;
+let animationId; // requestAnimationFrame の ID
+let shooting = false; // 長押し連射フラグ
 
 // UI
 const rowsSlider = document.getElementById("rowsSlider");
@@ -54,7 +56,8 @@ rowsSlider.addEventListener("input", ()=>{ rowsVal.textContent = rowsSlider.valu
 const speedSlider = document.getElementById("speedSlider");
 const speedVal = document.getElementById("speedVal");
 speedSlider.addEventListener("input", ()=>{
-  speedVal.textContent = parseFloat(speedSlider.value).toFixed(1);
+  fallSpeed = parseFloat(speedSlider.value);
+  speedVal.textContent = fallSpeed.toFixed(1);
 });
 
 // 発射
@@ -69,7 +72,7 @@ function shoot() {
   const s = document.getElementById("shootSound"); s.currentTime=0; s.play();
 
   if(shotCount % 10 === 0){
-    // ボーナスショット：垂直から左右45度の範囲に8本
+    // ボーナスショット：左右45度の範囲に8本
     const angles = [];
     const startAngle = -45;
     const endAngle = 45;
@@ -91,15 +94,28 @@ function shoot() {
   }
 }
 
-// 操作
+// キー入力（スペースで発射）
 document.addEventListener("keydown", shoot);
-canvas.addEventListener("mousedown", shoot);
-canvas.addEventListener("touchstart", shoot);
+
+// マウス／タッチ 長押し対応
+canvas.addEventListener("mousedown", ()=>{ shooting = true; });
+canvas.addEventListener("mouseup",   ()=>{ shooting = false; });
+canvas.addEventListener("mouseleave",()=>{ shooting = false; });
+canvas.addEventListener("touchstart", (e)=>{
+  shooting = true;
+  e.preventDefault();
+});
+canvas.addEventListener("touchend", ()=>{ shooting = false; });
 
 // スタート
 document.getElementById("startBtn").addEventListener("click", ()=>startGame());
 
 function startGame(){
+  // 前のループを止める
+  if(animationId){
+    cancelAnimationFrame(animationId);
+  }
+
   score=0; shotCount=0;
   gameOver=false; gameClear=false;
   gameStarted=true;
@@ -108,7 +124,6 @@ function startGame(){
   canShoot=false; 
   setTimeout(()=>canShoot=true, 200);
 
-  // スライダーで設定した値を落下速度として固定
   fallSpeed = parseFloat(speedSlider.value);
 
   document.getElementById("message").textContent="";
@@ -116,7 +131,7 @@ function startGame(){
   document.getElementById("startBtn").style.display="none";
   createPlayer();
   createEnemies();
-  requestAnimationFrame(gameLoop);
+  animationId = requestAnimationFrame(gameLoop);
 }
 
 function createEnemies(){
@@ -147,11 +162,11 @@ function moveEnemies(){
   if(alive.length==0) return;
   let leftMost = Math.min(...alive.map(e=>e.x-e.w/2));
   let rightMost = Math.max(...alive.map(e=>e.x+e.w/2));
-  const horizontalSpeed = 0.75*fallSpeed; // 敵の左右移動速度
+  const horizontalSpeed = 0.75*fallSpeed; 
   if(leftMost<=0 || rightMost>=canvas.width) enemyDir*=-1;
   alive.forEach(e=>{
     e.x += enemyDir*horizontalSpeed;
-    e.y += fallSpeed * 0.25; // ← スライダーで決めた速度で一定落下
+    e.y += fallSpeed*0.25; // ← スライダーで調整された値を一定速度で加算
     if(e.y+e.h/2 >= player.y - player.h/2) triggerGameOver();
   });
 }
@@ -170,7 +185,10 @@ function gameLoop(){
 
   if(gameStarted){
     if(!gameOver && !gameClear){
-      // プレイヤー自動移動（固定速度）
+      // 長押し時の自動連射
+      if(shooting) shoot();
+
+      // プレイヤー自動移動
       player.x += player.dir*player.speed;
       if(player.x<player.w/2 || player.x>canvas.width-player.w/2) player.dir*=-1;
 
@@ -211,13 +229,15 @@ function gameLoop(){
     ctx.fillRect(e.x-e.w/2,e.y-e.h/2,e.w,e.h);
   });
 
-  ctx.fillStyle="#0f0"; ctx.fillRect(player.x-player.w/2,player.y-player.h/2,player.w,player.h);
-  ctx.fillStyle="#0a0"; ctx.fillRect(player.x-2,player.y-player.h/2-8,4,8);
+  ctx.fillStyle="#0f0"; 
+  ctx.fillRect(player.x-player.w/2,player.y-player.h/2,player.w,player.h);
+  ctx.fillStyle="#0a0"; 
+  ctx.fillRect(player.x-2,player.y-player.h/2-8,4,8);
 
   ctx.fillStyle="#ff0";
   beams.forEach(b=>{ ctx.fillRect(b.x-8,b.y-8,16,8); });
 
-  requestAnimationFrame(gameLoop);
+  animationId = requestAnimationFrame(gameLoop);
 }
 </script>
 
